@@ -102,8 +102,11 @@ __global__ void bias_add_transform_0213(__half* output,  // q
     int d2 = threadIdx.y + (blockIdx.z % head_ext) * (heads / head_ext);  // Head (0-11)
     int d3 = threadIdx.x;                                                 // Values (groups of 4)
 
-    int d2_out_stride = d2_stride * (cnt == 0 ? seq_length : max_out_tokens);
-    int d0_out_stride = hidden_dim * (cnt == 0 ? seq_length : max_out_tokens);
+    //int d2_out_stride = d2_stride * (cnt == 0 ? seq_length : max_out_tokens);
+    //int d0_out_stride = hidden_dim * (cnt == 0 ? seq_length : max_out_tokens);
+
+    int d2_out_stride = d2_stride * (true ? seq_length : max_out_tokens);
+    int d0_out_stride = hidden_dim * (true ? seq_length : max_out_tokens);
 
     float4 vals_arr;
     float4 output_arr;
@@ -115,17 +118,21 @@ __global__ void bias_add_transform_0213(__half* output,  // q
     float4* output_vec =
         reinterpret_cast<float4*>(cnt == 0 ? output : (cnt == 1 ? k_cache : v_cache));
 
-    vals_vec += (d0 * d0_stride * (gridDim.z / head_ext));
-    vals_vec += (d1 * d1_stride * (gridDim.z / head_ext));
-    vals_vec += (cnt * d1_stride);
-    vals_vec += (d2 * d2_stride);
-
-    output_vec += (d1 * d2_stride);
-    output_vec += (d0 * d0_out_stride);
-    output_vec += (d2 * d2_out_stride);
-
+    vals_vec += (d0 * d0_stride * (gridDim.z / head_ext)); //bs: + 0
+    vals_vec += (d1 * d1_stride * (gridDim.z / head_ext)); //seq id,
+    vals_vec += (cnt * d2_stride); //qkv V
+    vals_vec += (d2 * d2_stride * (gridDim.z / head_ext)); //heads^ （stride上下交换）
+    if (cnt != 1) {
+    output_vec += (d1 * d2_stride); // seq id
+    output_vec += (d0 * d0_out_stride); // bs
+    output_vec += (d2 * d2_out_stride); // heads
+    } else {
+    output_vec += (d1 * d2_stride); // seq id
+    output_vec += (d0 * d0_out_stride); // bs
+    output_vec += (d2 * d2_out_stride); // heads
+    }
     unsigned seq_id = d1 + seq_offset;
-
+    /*
     int lane = d3 & 0x1f;
     if (cnt < 2 && rotary_dim > 0 && d3 < rotary_dim) {
         float4 q = vals_vec[d3];
@@ -144,7 +151,12 @@ __global__ void bias_add_transform_0213(__half* output,  // q
         }
         output_vec[d3] = q;
     } else
+    */
+    if (false)
+        output_vec[d3] = float4{1.0f, 1.0f, 1.0f,1.0f};
+    else {
         output_vec[d3] = vals_vec[d3];
+    }
 }
 
 // [B S C*H] - > C * [B A S N]
