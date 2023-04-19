@@ -423,6 +423,40 @@ void launch_attn_softmax_v2(T* vals,
                             int mp_size,
                             cudaStream_t stream)
 {
+/*
+printf("layer_scale=%f,triangular=%d,recompute=%d,local_attention=%d,window_size=%d,batch_size=%d,heads=%d\n",
+layer_scale,triangular,recompute,local_attention,window_size,batch_size,heads);
+printf("num_seq=%d,seq_len=%d,head_offset=%d,mask_stride=%d,mp_size=%d\n",
+num_seq,sequence_length,head_offset,mask_stride,mp_size);
+recompute = 0;
+    cudaDeviceSynchronize();
+    int size = 1 << 8;
+    int NO_BYTES = sizeof(T) * size;
+    T* h_val = (T *)malloc(NO_BYTES);
+    T* h_mask = (T *)malloc(NO_BYTES);
+    T* h_ali = (T *)malloc(NO_BYTES);
+    cudaMemcpy(h_val,vals, NO_BYTES, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_mask, mask, NO_BYTES, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_ali, alibi, NO_BYTES, cudaMemcpyDeviceToHost);
+    printf("%s\n", "val:");
+    for(int i =0; i < size; i++) {
+        printf("%f ", (float)h_val[i]);;
+    }
+        printf("\n");;
+
+    printf("%s\n", "mask:");
+    for(int i =0; i < size; i++) {
+        printf("%f ", (float)h_mask[i]);;
+    }
+        printf("\n");;
+
+    printf("%s\n", "alibi:");
+    for(int i =0; i < size; i++) {
+        printf("%f ", (float)h_ali[i]);;
+    }
+        printf("\n");;
+  */  
+    
     const int total_count = batch_size * heads * num_seq;
 
     // Scheduling Overview

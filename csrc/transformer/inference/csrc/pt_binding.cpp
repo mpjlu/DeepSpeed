@@ -72,7 +72,6 @@ at::Tensor ds_softmax(at::Tensor& attn_scores,
     int seq_len = attn_scores_c.size(1);
     int len = attn_scores_c.sizes().size();
     if (len > 2) seq_len = attn_scores_c.size(2);
-
     int soft_len = attn_scores_c.size(2);
     if (len > 3) soft_len = attn_scores_c.size(3);
 
@@ -341,7 +340,40 @@ void ds_softmax_internal(T* attn_scores,
                            1,
                            at::cuda::getCurrentCUDAStream());
 }
+template <typename T>
+void print_value(T* addr, int len, char* s) {
+    cudaDeviceSynchronize();
+    int size = len;
+    int NO_BYTES = sizeof(T) * size;
+    T* query = (T *)malloc(NO_BYTES);
 
+    cudaMemcpy(query, addr, NO_BYTES, cudaMemcpyDeviceToHost);
+
+    printf("%s\n", s); //right
+    for(int i =0; i < size; i++) {
+        printf("%f ", (float)query[i]);
+        if ((i +1 )% 64 == 0)
+            printf("\n");
+    }
+        printf("\n");
+}
+
+template <typename T>
+void print_sum(T* addr, int len, char* s) {
+    cudaDeviceSynchronize();
+    int size = len;
+    int NO_BYTES = sizeof(T) * size;
+    T* query = (T *)malloc(NO_BYTES);
+
+    cudaMemcpy(query, addr, NO_BYTES, cudaMemcpyDeviceToHost);
+
+    printf("%s\n", s); //right
+    float v_sum = 0;
+    for(int i =0; i < size; i++) {
+        v_sum = v_sum + (float)query[i];
+    }
+    printf("sum is %f\n", v_sum);;
+}
 template <typename T>
 void attention_unfused(T* prev_key_cont,
                        T* query_cont,
@@ -361,8 +393,9 @@ void attention_unfused(T* prev_key_cont,
                        at::Tensor& alibi,
                        int layer_id)
 {
-    float layer_scale = alibi.sizes().size() > 1 ? std::max(1, layer_id) : 1.0;
-    float alpha = norm_factor * norm_factor / layer_scale;
+    std::cout<<"alibi peng sizes().size():"<<alibi.sizes().size()<<std::endl;
+    float layer_scale = norm_factor * norm_factor; // alibi.sizes().size() > 1 ? std::max(1, layer_id) : 1.0;
+    float alpha = 1.0; //norm_factor * norm_factor / layer_scale;
     float gemm_beta = 0.0;
     T* workspace = (T*)Context::Instance().GetAttentionUnfusedWorkspace();
 
@@ -378,7 +411,8 @@ void attention_unfused(T* prev_key_cont,
                                 workspace,
                                 CUBLAS_OP_T,
                                 CUBLAS_OP_N,
-                                Context::Instance().GetMaxTokenLenght() * k,
+                                //Context::Instance().GetMaxTokenLenght() * k,
+                                seq_len * k,
                                 seq_len * k,
                                 seq_len * soft_len,
                                 bsz * heads,
@@ -387,6 +421,12 @@ void attention_unfused(T* prev_key_cont,
 #else
                                 CUBLAS_GEMM_DEFAULT_TENSOR_OP);
 #endif
+printf("bsz*head=%d, soft_len=%d, seq_len=%d, k=%d\n", bsz*heads, soft_len, seq_len, k);
+print_sum(workspace, 16*8*8, "attention_score");
+//print_value(workspace, 16*8*8, "attention_score");
+//char str[] = "attention_score";
+//print_value(workspace, str);
+
     ds_softmax_internal<T>(workspace,
                            attn_mask,
                            alibi,
@@ -411,7 +451,8 @@ void attention_unfused(T* prev_key_cont,
                                 (T*)output,
                                 CUBLAS_OP_N,
                                 CUBLAS_OP_N,
-                                Context::Instance().GetMaxTokenLenght() * k,
+                                //Context::Instance().GetMaxTokenLenght() * k,
+seq_len * k,
                                 seq_len * soft_len,
                                 seq_len * k,
                                 bsz * heads,
@@ -466,8 +507,10 @@ std::vector<at::Tensor> ds_softmax_context(at::Tensor& query_key_value,
     unsigned all_tokens = soft_len;
     auto kv_cache = workspace + offset + (hidden_dim / heads) * (is_prompt ? 0 : soft_len - 1);
     size_t value_offset = bsz * Context::Instance().GetMaxTokenLenght() * hidden_dim;
+    long diff_kq = (offset + (hidden_dim / heads) * (is_prompt ? 0 : soft_len - 1)) -  (8 * buf_size);
 
     T* temp_buf = (T*)output.data_ptr() + at::numel(output);
+print_sum((T*)query_key_value.data_ptr(), 8*1024*3, "qkv_sum");
     launch_bias_add_transform_0213<T>((T*)query_cont,
                                       kv_cache,
                                       kv_cache + value_offset,
@@ -485,6 +528,8 @@ std::vector<at::Tensor> ds_softmax_context(at::Tensor& query_key_value,
                                       Context::Instance().GetCurrentStream(),
                                       3,
                                       Context::Instance().GetMaxTokenLenght());
+    
+/*
     if (rotary_dim > 0 && rotate_half)
         launch_apply_rotary_pos_emb(query_cont,
                                     kv_cache,
@@ -498,7 +543,14 @@ std::vector<at::Tensor> ds_softmax_context(at::Tensor& query_key_value,
                                     rotate_every_two,
                                     Context::Instance().GetCurrentStream(),
                                     Context::Instance().GetMaxTokenLenght());
-
+*/
+    print_sum(query_cont, 8*1024, "query_sum");
+    //print_value((T*)query_cont, 8*1024, "query_value");
+    print_sum(kv_cache, 8*1024, "key_sum");
+    //print_value((T*)kv_cache, 8*1024, "key_value");
+    //    print_value((T*)query_key_value.data_ptr(), 8*3072, "qkv_out");
+    print_sum((T*)(workspace + offset + value_offset), 8*1024, "value_sum");
+    //print_value((T*)(workspace + offset + value_offset), 8*1024, "value_layer");
     attention_unfused<T>(workspace + offset,
                          (T*)query_cont,
                          attn_mask,

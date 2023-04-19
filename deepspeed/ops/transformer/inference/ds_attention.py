@@ -74,13 +74,13 @@ class DeepSpeedSelfAttention(nn.Module):
 
         if no_masking:
             input_mask = torch.empty(1)
-
+        qkv_out = qkv_out.contiguous()
         attn_key_value = self.score_context_func(
             query_key_value=qkv_out,
             attn_mask=((1 - input_mask).to(qkv_out.dtype) *
-                       minus_inf) if input_mask.dtype == torch.int64 else input_mask,
+                       minus_inf), # if input_mask.dtype == torch.int64 else input_mask,
             heads=self.num_attention_heads_per_partition,
-            norm_factor=(1 / self.norm_factor if self.config.scale_attention else 1.0),
+            norm_factor=(1 / self.norm_factor), # if self.config.scale_attention else 1.0),
             no_masking=no_masking,
             layer_id=self.config.layer_id,
             num_layers=DeepSpeedSelfAttention.num_layers,
@@ -101,7 +101,7 @@ class DeepSpeedSelfAttention(nn.Module):
                 norm_w=None,
                 norm_b=None,
                 alibi=None):
-
+        # bloom pre_layer_norm is true
         if not self.config.pre_layer_norm:
             qkv_out = self.linear_func(input=input,
                                        weight=self.attn_qkvw,
@@ -119,14 +119,21 @@ class DeepSpeedSelfAttention(nn.Module):
                                     add_bias=(self.attn_qkvb is not None),
                                     num_layers=DeepSpeedSelfAttention.num_layers,
                                     num_heads=self.num_attention_heads_per_partition)
-
+        #torch.set_printoptions(threshold=8*3072)
+        #print("qkv_out.shape:" + str(qkv_out[0].shape))
+        #print("qkv_sum:" + str(qkv_out[0]))
         context_layer, key_layer, value_layer = self.compute_attention(qkv_out=qkv_out,
                                                                        input_mask=input_mask,
                                                                        layer_past=layer_past,
                                                                        alibi=alibi)
-
+        print("context_layer:" + str(torch.sum(context_layer)))                                                               
+        #print("context_layer:" + str(context_layer))
+        print("key_layer:" + str(key_layer.shape))
+        #print("key_layer:" + str(key_layer))
+        print("value_layer:" + str(value_layer.shape))
+        #print("value_layer:" + str(value_layer))
         output = self.vector_matmul_func(input=context_layer, weight=self.attn_ow)
-
+        print("after att matmul output:" + str(torch.sum(output)))
         inp_norm = qkv_out[-1]
 
         if self.config.mlp_after_attn and self.mp_group is not None and dist.get_world_size(group=self.mp_group) > 1:
@@ -180,19 +187,26 @@ class BloomSelfAttention(DeepSpeedSelfAttention):
             qkv_out = qkv_out[0]
 
         no_masking = input_mask is None
-
+        print("qkv_sum:" + str(torch.sum(qkv_out)))
         if no_masking:
             input_mask = torch.empty(1)
-
+        #1, 8, 3072
         mixed_x_layer = qkv_out
         alibi = alibi.to(get_accelerator().current_device_name())
+        #head_dim 64
         head_dim = self.hidden_size_per_partition // self.num_attention_heads_per_partition
+        #hidden_size_per_partition: 1024
+        #num_heads: 16
+        
+        #1 8 16 192
         new_tensor_shape = mixed_x_layer.size()[:-1] + (self.num_attention_heads_per_partition, 3 * head_dim)
         mixed_x_layer = mixed_x_layer.view(*new_tensor_shape)
 
         query_layer, key_layer, value_layer = self._split_tensor_along_last_dim(mixed_x_layer, 3)
 
+
         # [batch_size, head_dim, q_length, k_length]
+        # output size: 1  16  8  8
         output_size = (query_layer.size(0), query_layer.size(2), query_layer.size(1), key_layer.size(1))
         # [batch_size, q_length, num_heads, head_dim] -> [q_length, batch_size * num_heads, head_dim]
         query_layer = query_layer.transpose(1, 2).reshape(output_size[0] * output_size[1], output_size[2], -1)
@@ -205,19 +219,30 @@ class BloomSelfAttention(DeepSpeedSelfAttention):
             # concatenate along seq_length dimension -> [batch_size, qk_length, num_heads, head_dim]
             key_layer = torch.cat((past_key.type_as(key_layer), key_layer), dim=-1)
             value_layer = torch.cat((past_value.type_as(value_layer), value_layer), dim=-2)
+        torch.set_printoptions(threshold=8*1024)
+        #print("output_size.shape:" + str(output_size))
+        print("query:" + str(torch.sum(query_layer)))
+        #print("query_value:" + str(query_layer))
+        print("key:" + str(torch.sum(key_layer)))
+        #print("key_value:" + str(key_layer))
 
+        print("value:" + str(torch.sum(value_layer)))
+        #print("value:" + str(value_layer))
         presents = (key_layer, value_layer)
         # Raw attention scores. [batch_size * num_heads, q_length, k_length]
         matmul_result = torch.matmul(query_layer, key_layer)
+        print("matmul_result.shape:" + str(matmul_result.shape))
+        print("matmul_result:" + str(torch.sum(matmul_result)))
+
         # change view to [batch_size, num_heads, q_length, k_length]
         attention_scores = matmul_result.view(output_size[0], output_size[1], output_size[2], -1)
-
+        #print("matmul_result(view):" + str(attention_scores))
         offset = dist.get_rank() * self.num_attention_heads_per_partition if dist.is_initialized() else 0
         attention_probs = self.softmax_func(attn_scores=attention_scores,
                                             attn_mask=((1 - input_mask).half() * minus_inf),
                                             alibi=alibi,
-                                            triangular=(self.config.triangular_masking
-                                                        and (attention_scores.shape[-2] > 1)),
+                                            triangular=(self.config.triangular_masking),
+                                                         #and (attention_scores.shape[-2] > 1)),
                                             recompute=False,
                                             local_attention=False,
                                             window_size=1,
