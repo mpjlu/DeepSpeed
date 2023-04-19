@@ -56,7 +56,7 @@ class DeepSpeedTransformerInference(nn.Module):
         if DeepSpeedTransformerInference.layer_id == 1:
             log_dist(f"DeepSpeed-Inference config: {self.config.__dict__}", [0])
 
-        if False: #self.config.bigscience_bloom:
+        if True: #self.config.bigscience_bloom:
             self.attention = BloomSelfAttention(self.config, mp_group, quantize_scales, quantize_groups, merge_count)
         else:
             self.attention = DeepSpeedSelfAttention(self.config, mp_group, quantize_scales, quantize_groups,

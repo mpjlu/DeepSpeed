@@ -428,7 +428,7 @@ printf("layer_scale=%f,triangular=%d,recompute=%d,local_attention=%d,window_size
 layer_scale,triangular,recompute,local_attention,window_size,batch_size,heads);
 printf("num_seq=%d,seq_len=%d,head_offset=%d,mask_stride=%d,mp_size=%d\n",
 num_seq,sequence_length,head_offset,mask_stride,mp_size);
-recompute = 0;
+#recompute = 0;
     cudaDeviceSynchronize();
     int size = 1 << 8;
     int NO_BYTES = sizeof(T) * size;

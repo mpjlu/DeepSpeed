@@ -214,12 +214,7 @@ class BloomSelfAttention(DeepSpeedSelfAttention):
         key_layer = key_layer.transpose(1, 2).reshape(output_size[0] * output_size[1], output_size[3],
                                                       -1).transpose(-1, -2)
         value_layer = value_layer.transpose(1, 2).reshape(output_size[0] * output_size[1], output_size[3], -1)
-        if layer_past is not None:
-            past_key, past_value = layer_past
-            # concatenate along seq_length dimension -> [batch_size, qk_length, num_heads, head_dim]
-            key_layer = torch.cat((past_key.type_as(key_layer), key_layer), dim=-1)
-            value_layer = torch.cat((past_value.type_as(value_layer), value_layer), dim=-2)
-        torch.set_printoptions(threshold=8*1024)
+        #torch.set_printoptions(threshold=18*1024)
         #print("output_size.shape:" + str(output_size))
         print("query:" + str(torch.sum(query_layer)))
         #print("query_value:" + str(query_layer))
@@ -227,12 +222,25 @@ class BloomSelfAttention(DeepSpeedSelfAttention):
         #print("key_value:" + str(key_layer))
 
         print("value:" + str(torch.sum(value_layer)))
+        if False: #output_size[2] == 1:
+            print("query_value:" + str(query_layer))
+            print("key_value:" + str(key_layer))
         #print("value:" + str(value_layer))
+        if layer_past is not None:
+            past_key, past_value = layer_past
+            # concatenate along seq_length dimension -> [batch_size, qk_length, num_heads, head_dim]
+            key_layer = torch.cat((past_key.type_as(key_layer), key_layer), dim=-1)
+            value_layer = torch.cat((past_value.type_as(value_layer), value_layer), dim=-2)
+        if output_size[2] == 1:
+            print("key_value_sum:" + str(torch.sum(key_layer)))
+            #print("query_value:" + str(query_layer))
+            #print("key_value_cat:" + str(key_layer))
         presents = (key_layer, value_layer)
         # Raw attention scores. [batch_size * num_heads, q_length, k_length]
         matmul_result = torch.matmul(query_layer, key_layer)
         print("matmul_result.shape:" + str(matmul_result.shape))
         print("matmul_result:" + str(torch.sum(matmul_result)))
+        #print("matmul_result:" + str(matmul_result))
 
         # change view to [batch_size, num_heads, q_length, k_length]
         attention_scores = matmul_result.view(output_size[0], output_size[1], output_size[2], -1)
@@ -241,8 +249,8 @@ class BloomSelfAttention(DeepSpeedSelfAttention):
         attention_probs = self.softmax_func(attn_scores=attention_scores,
                                             attn_mask=((1 - input_mask).half() * minus_inf),
                                             alibi=alibi,
-                                            triangular=(self.config.triangular_masking),
-                                                         #and (attention_scores.shape[-2] > 1)),
+                                            triangular=(self.config.triangular_masking
+                                                         and (attention_scores.shape[-2] > 1)),
                                             recompute=False,
                                             local_attention=False,
                                             window_size=1,
