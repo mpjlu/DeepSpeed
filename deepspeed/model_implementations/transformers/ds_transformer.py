@@ -56,7 +56,7 @@ class DeepSpeedTransformerInference(nn.Module):
         if DeepSpeedTransformerInference.layer_id == 1:
             log_dist(f"DeepSpeed-Inference config: {self.config.__dict__}", [0])
 
-        if True: #self.config.bigscience_bloom:
+        if False: #self.config.bigscience_bloom:
             self.attention = BloomSelfAttention(self.config, mp_group, quantize_scales, quantize_groups, merge_count)
         else:
             self.attention = DeepSpeedSelfAttention(self.config, mp_group, quantize_scales, quantize_groups,
@@ -136,7 +136,7 @@ class DeepSpeedTransformerInference(nn.Module):
             and input.dtype == torch.float:
             input = input.half()
         with torch.no_grad():
-            print("input before attention:" + str(input.shape))
+            #print("input before attention:" + str(input.shape))
             attention_output, key, value, context_outputtn_ctx, inp_norm = \
                                      self.attention(input,
                                               input_mask,

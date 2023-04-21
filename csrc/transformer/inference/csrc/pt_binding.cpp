@@ -393,7 +393,7 @@ void attention_unfused(T* prev_key_cont,
                        at::Tensor& alibi,
                        int layer_id)
 {
-    std::cout<<"alibi peng sizes().size():"<<alibi.sizes().size()<<std::endl;
+    //std::cout<<"alibi peng sizes().size():"<<alibi.sizes().size()<<std::endl;
     float layer_scale = norm_factor * norm_factor; // alibi.sizes().size() > 1 ? std::max(1, layer_id) : 1.0;
     float alpha = 1.0; //norm_factor * norm_factor / layer_scale;
     float gemm_beta = 0.0;
@@ -420,9 +420,9 @@ void attention_unfused(T* prev_key_cont,
 #else
                                 CUBLAS_GEMM_DEFAULT_TENSOR_OP);
 #endif
-printf("bsz*head=%d, soft_len=%d, seq_len=%d, k=%d\n", bsz*heads, soft_len, seq_len, k);
+//printf("bsz*head=%d, soft_len=%d, seq_len=%d, k=%d\n", bsz*heads, soft_len, seq_len, k);
 
-print_sum(workspace, 16*soft_len*seq_len, "attention_score");
+//print_sum(workspace, 16*soft_len*seq_len, "attention_score");
 //print_value(workspace, 16*soft_len*seq_len, "attention_score");
 //print_value(workspace, 16*8*8, "attention_score");
 //char str[] = "attention_score";
@@ -512,7 +512,7 @@ std::vector<at::Tensor> ds_softmax_context(at::Tensor& query_key_value,
     long diff_kq = (offset + (hidden_dim / heads) * (is_prompt ? 0 : soft_len - 1)) -  (8 * buf_size);
 
     T* temp_buf = (T*)output.data_ptr() + at::numel(output);
-print_sum((T*)query_key_value.data_ptr(), seq_len*1024*3, "qkv_sum");
+    //print_sum((T*)query_key_value.data_ptr(), seq_len*1024*3, "qkv_sum");
     launch_bias_add_transform_0213<T>((T*)query_cont,
                                       kv_cache,
                                       kv_cache + value_offset,
@@ -546,6 +546,7 @@ print_sum((T*)query_key_value.data_ptr(), seq_len*1024*3, "qkv_sum");
                                     Context::Instance().GetCurrentStream(),
                                     Context::Instance().GetMaxTokenLenght());
 */
+/*
     print_sum(query_cont, seq_len*1024, "query_sum");
     //print_value((T*)query_cont, 8*1024, "query_value");
     print_sum(kv_cache, seq_len*1024, "key_sum");
@@ -559,6 +560,7 @@ print_sum((T*)query_key_value.data_ptr(), seq_len*1024*3, "qkv_sum");
     print_value((T*)kv_cache, 16 * seq_len * k, "key_value");
     print_value((T*)(workspace + offset), 16 * soft_len * k, "key_value_cat");
 }
+*/
     attention_unfused<T>(workspace + offset,
                          (T*)query_cont,
                          attn_mask,
